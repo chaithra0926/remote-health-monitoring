@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Remote Health Monitoring</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<header>
+  <h1 id="patientTitle">Remote Health Monitoring <span>Dashboard</span></h1>
+  <div id="live-indicator"><span class="dot"></span> Live Monitoring Active</div>
+</header>
+
+<div class="main-container">
+
+  <div class="stats-row">
+    <div class="card stat-card">
+      <h2>Heart Rate</h2>
+      <p id="heartRate">-- <span>BPM</span></p>
+    </div>
+
+    <div class="card stat-card">
+      <h2>Temperature</h2>
+      <p id="temperature">-- <span>°C</span></p>
+    </div>
+
+    <div class="card stat-card status">
+      <h2>Patient Status</h2>
+      <p id="status">CONNECTING...</p>
+    </div>
+  </div>
+
+  <div class="charts-row">
+    <div class="card chart-card">
+      <h2>Heart Rate Analytics</h2>
+      <div class="canvas-container">
+        <canvas id="heartChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card chart-card">
+      <h2>Temperature Analytics</h2>
+      <div class="canvas-container">
+        <canvas id="tempChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
