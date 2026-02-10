@@ -93,7 +93,7 @@ function sendEmail(v) {
     patient: patientName,
     heart: v.heartRate,
     temp: v.temperature,
-    link: window.location.href
+    link: "https://chaithra0926.github.io/remote-health-monitoring/"
   });
 }
 
@@ -140,3 +140,4 @@ setInterval(() => {
       tempChart.update();
     });
 }, 1000);
+
