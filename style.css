@@ -20,8 +20,15 @@ body {
   align-items: center;
 }
 
-header { text-align: center; margin-bottom: 40px; }
-header h1 span { font-weight: 600; color: var(--accent-blue); }
+header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+header h1 span {
+  font-weight: 600;
+  color: var(--accent-blue);
+}
 
 .main-container {
   width: 100%;
@@ -43,16 +50,31 @@ header h1 span { font-weight: 600; color: var(--accent-blue); }
   padding: 24px;
 }
 
-.stat-card { min-width: 250px; text-align: center; }
-.chart-card { min-width: 450px; }
+.stat-card {
+  min-width: 250px;
+  text-align: center;
+}
 
-.card p { font-size: 2.5rem; font-weight: 700; }
-.card p span { font-size: 1rem; }
+.chart-card {
+  min-width: 450px;
+}
 
-.canvas-container { height: 250px; }
+.card p {
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+.card p span {
+  font-size: 1rem;
+}
+
+.canvas-container {
+  height: 250px;
+}
 
 .dot {
-  height: 10px; width: 10px;
+  height: 10px;
+  width: 10px;
   background: #4ade80;
   border-radius: 50%;
   display: inline-block;
@@ -62,4 +84,20 @@ header h1 span { font-weight: 600; color: var(--accent-blue); }
 @keyframes pulse {
   0%,100% { opacity: 1; }
   50% { opacity: 0.4; }
+}
+
+/* Ambulance Button */
+
+#dispatchBtn{
+  background:#fb7185;
+  border:none;
+  padding:12px 20px;
+  border-radius:10px;
+  color:white;
+  font-size:16px;
+  cursor:pointer;
+}
+
+#dispatchBtn:hover{
+  background:#ef4444;
 }
