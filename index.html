@@ -1,11 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
 <meta charset="UTF-8">
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>Remote Health Monitoring</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+
 <link rel="stylesheet" href="style.css">
 
 </head>
@@ -13,11 +18,20 @@
 <body>
 
 <header>
-<h1 id="patientTitle">Remote Health Monitoring <span>Dashboard</span></h1>
-<div id="live-indicator"><span class="dot"></span> Live Monitoring Active</div>
+
+<h1 id="patientTitle">
+Remote Health Monitoring <span>Dashboard</span>
+</h1>
+
+<div id="live-indicator">
+<span class="dot"></span> Live Monitoring Active
+</div>
+
 </header>
 
 <div class="main-container">
+
+<!-- Vital Stats -->
 
 <div class="stats-row">
 
@@ -38,40 +52,60 @@
 
 </div>
 
+<!-- Charts -->
+
 <div class="charts-row">
 
 <div class="card chart-card">
+
 <h2>Heart Rate Analytics</h2>
+
 <div class="canvas-container">
 <canvas id="heartChart"></canvas>
 </div>
+
 </div>
 
 <div class="card chart-card">
+
 <h2>Temperature Analytics</h2>
+
 <div class="canvas-container">
 <canvas id="tempChart"></canvas>
 </div>
-</div>
 
 </div>
 
-<!-- Ambulance Dispatch Section -->
+</div>
+
+<!-- Ambulance Dispatch -->
 
 <div class="stats-row">
 
 <div class="card stat-card">
+
 <h2>Emergency Response</h2>
-<button id="dispatchBtn" onclick="dispatchAmbulance()">Dispatch Ambulance</button>
-</div>
+
+<button id="dispatchBtn">
+Dispatch Ambulance
+</button>
 
 </div>
 
 </div>
+
+</div>
+
+<!-- Libraries -->
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
-<script src="script.js"></script>
+
+<!-- Script -->
+
+<script src="script.js?v=3"></script>
 
 </body>
+
 </html>
