@@ -137,7 +137,7 @@ const mapLink=`https://maps.google.com/?q=${v.lat || ""},${v.lng || ""}`
 const templateParams={
 
 patient:patientName,
-heart:v.heartRate || 0,
+heart:v.bpm || 0,
 temp:v.temperature || 0,
 link:mapLink,
 dashboard:"https://chaithra0926.github.io/remote-health-monitoring/",
@@ -173,7 +173,7 @@ fetch(VITALS_URL)
 
 if(!v) return
 
-heartRateEl.innerHTML=`${v.heartRate || 0} <span>BPM</span>`
+heartRateEl.innerHTML=`${v.bpm || 0} <span>BPM</span>`
 temperatureEl.innerHTML=`${v.temperature || 0} <span>°C</span>`
 
 if(isEmergency(v)){
