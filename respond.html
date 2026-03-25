@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<body>
+
+<h2>Processing...</h2>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBgyRK5p874SBS7UEJX0mEftAzTFKA6TbI",
+  authDomain: "iot-miniproject-8582d.firebaseapp.com",
+  databaseURL: "https://iot-miniproject-8582d-default-rtdb.firebaseio.com",
+  projectId: "iot-miniproject-8582d",
+  storageBucket: "iot-miniproject-8582d.firebasestorage.app",
+  messagingSenderId: "144078387603",
+  appId: "1:144078387603:web:70e637b635bdced508d066"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+const url=new URL(window.location.href)
+const res=url.searchParams.get("res")
+
+set(ref(db,"dispatch/response"),res)
+
+document.body.innerHTML="<h2>Response recorded ✔</h2>"
+</script>
+
+</body>
+</html>
