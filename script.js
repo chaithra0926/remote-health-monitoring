@@ -123,9 +123,7 @@ options:{responsive:true,maintainAspectRatio:false}
 /******** EMERGENCY CHECK ********/
 
 function isEmergency(v){
-
-return v.temperature>37 || v.temperature<33
-
+  return v.temperature > 37
 }
 
 /******** EMAIL ALERT ********/
