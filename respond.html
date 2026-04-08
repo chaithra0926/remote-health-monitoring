@@ -6,7 +6,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBgyRK5p874SBS7UEJX0mEftAzTFKA6TbI",
@@ -21,12 +21,19 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-const url=new URL(window.location.href)
-const res=url.searchParams.get("res")
+// GET PARAMETERS
+const url = new URL(window.location.href);
+const res = url.searchParams.get("res");       // accept / reject
+const driver = url.searchParams.get("driver"); // driver index
 
-set(ref(db,"dispatch/response"),res)
+// STORE AS NEW ENTRY (IMPORTANT)
+push(ref(db,"dispatch/responses"), {
+    response: res,
+    driver: driver,
+    time: new Date().toLocaleString()
+});
 
-document.body.innerHTML="<h2>Response recorded ✔</h2>"
+document.body.innerHTML = "<h2>Response recorded ✔</h2>";
 </script>
 
 </body>
