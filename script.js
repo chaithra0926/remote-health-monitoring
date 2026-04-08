@@ -32,6 +32,7 @@ const SAVE_INTERVAL = 10000;
 
 /******** ALERT CONTROL ********/
 let lastAlert = "NORMAL";
+let alertEmailSent = false;  // 🔴 Track if alert email was already sent
 let ambulanceAssigned = false;
 let currentDriver = 0;
 let lastProcessedResponse = null;
@@ -443,24 +444,34 @@ setInterval(()=>{
 
         // email trigger
         if(finalLevel !== lastAlert){
-            if(finalLevel === "WARNING" || finalLevel === "CRITICAL"){
-                sendEmail("doctor", v, finalLevel);
-            }
-
-            if(finalLevel === "CRITICAL" && !waitingForResponse){
-                if(drivers.length === 0){
-                    console.log("Waiting for drivers...");
-                    return;
-                }
-                lastProcessedResponse = null;
-                currentDriver = 0;
-                ambulanceAssigned = false;
-
-                sendNextDriver(v);
-            }
-
-            lastAlert = finalLevel;
+            // 🔴 Reset email flag when alert level changes
+            alertEmailSent = false;
         }
+
+        // Send email ONLY ONCE per alert (not on every update)
+        if((finalLevel === "WARNING" || finalLevel === "CRITICAL") && !alertEmailSent){
+            sendEmail("doctor", v, finalLevel);
+            alertEmailSent = true;  // Mark email as sent
+        }
+
+        // Reset when back to normal
+        if(finalLevel === "NORMAL"){
+            alertEmailSent = false;
+        }
+
+        if(finalLevel === "CRITICAL" && !waitingForResponse){
+            if(drivers.length === 0){
+                console.log("Waiting for drivers...");
+                return;
+            }
+            lastProcessedResponse = null;
+            currentDriver = 0;
+            ambulanceAssigned = false;
+
+            sendNextDriver(v);
+        }
+
+        lastAlert = finalLevel;
 
         monitorDispatch(v);
         // history save
