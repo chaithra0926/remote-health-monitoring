@@ -1,270 +1,512 @@
 /******** CONFIG ********/
+const DEVICE_ID = "DEVICE_001";
+const BASE_URL = "https://iot-miniproject-8582d-default-rtdb.firebaseio.com";
 
-const DEVICE_ID="DEVICE_001"
+const VITALS_URL = `${BASE_URL}/vitals/${DEVICE_ID}.json`;
+const HISTORY_URL = `${BASE_URL}/history/${DEVICE_ID}.json`;
+const DISPATCH_URL = `${BASE_URL}/dispatch/responses.json`;
+const DASHBOARD_URL = "https://chaithra0926.github.io/remote-health-monitoring/";
 
-const BASE_URL="https://iot-miniproject-8582d-default-rtdb.firebaseio.com"
+emailjs.init("8qKYU9gdC9ftK1Xdo");
 
-/******** EMAILJS ********/
+/******** UI ELEMENTS ********/
+const heartRateEl = document.getElementById("heartRate");
+const temperatureEl = document.getElementById("temperature");
+const spo2El = document.getElementById("spo2");
+const statusEl = document.getElementById("status");
+const riskScoreDisplay = document.getElementById("risk-score-display");
+const riskBadgeEl = document.getElementById("risk-level-badge");
+const riskArrowEl = document.getElementById("risk-arrow");
+const riskCaptionEl = document.getElementById("risk-caption");
+const ambulanceStatus = document.getElementById("ambulanceStatus");
+const locationEl = document.getElementById("location");
+const locationLinkEl = document.getElementById("locationLink");
+const ML_LABELS = ["NORMAL","WARNING","CRITICAL"];
 
-emailjs.init("8qKYU9gdC9ftK1Xdo")
+/******** DATA STORE ********/
+let labels = [], heartData = [], tempData = [], spo2Data = [];
+let historyLabels = [], historyRisk = [];
+let doctorEmail = "";
+let lastSavedTime = 0;
+const SAVE_INTERVAL = 10000;
 
-const SERVICE_ID="service_2orch13"
-const TEMPLATE_ID="template_gdh8ki6"
+/******** ALERT CONTROL ********/
+let lastAlert = "NORMAL";
+let ambulanceAssigned = false;
+let currentDriver = 0;
+let lastProcessedResponse = null;
+let lastResponseCount = 0;
+/****new****/
+const patientNameEl = document.getElementById("patientName");
+const patientDetailsEl = document.getElementById("patientDetails");
 
-/******** URLS ********/
+function fetchPatientInfo(){
+    fetch(`${BASE_URL}/devicePatientMap/${DEVICE_ID}.json`)
+    .then(res => res.json())
+    .then(data => {
+        if(!data) return;
 
-const VITALS_URL=`${BASE_URL}/vitals/${DEVICE_ID}.json`
-const DEVICE_URL=`${BASE_URL}/devices/${DEVICE_ID}.json`
-const PATIENT_URL=`${BASE_URL}/devicePatientMap/${DEVICE_ID}.json`
+        patientNameEl.innerText = "👤 " + data.name;
 
-/******** UI ********/
-
-const heartRateEl=document.getElementById("heartRate")
-const temperatureEl=document.getElementById("temperature")
-const statusEl=document.getElementById("status")
-const patientTitle=document.getElementById("patientTitle")
-
-/******** DATA ********/
-
-let labels=[]
-let heartData=[]
-let tempData=[]
-
-let doctorEmail=""
-let patientName=""
-
-/******** EMAIL CONTROL ********/
-
-let alertSent=false
-let emergencyStartTime=null
-
-const EMERGENCY_CONFIRM_TIME=5000
-
-/******** PATIENT LOCATION ********/
-
-function updatePatientLocation(){
-
-if(!navigator.geolocation) return
-
-navigator.geolocation.getCurrentPosition(function(position){
-
-const lat=position.coords.latitude
-const lng=position.coords.longitude
-
-fetch(VITALS_URL,{
-method:"PATCH",
-headers:{ "Content-Type":"application/json"},
-body:JSON.stringify({
-lat:lat,
-lng:lng
-})
-})
-
-})
-
+        patientDetailsEl.innerText =
+            `🆔 ${data.patientId} | Age: ${data.age} yrs | Gender: ${data.gender} | 📍 ${data.village}`;
+    })
+    .catch(err => console.error(err));
 }
 
-setInterval(updatePatientLocation,30000)
+fetchPatientInfo();
 
-/******** LOAD DOCTOR ********/
+/******** DRIVERS (UPDATED - FROM FIREBASE) ********/
+let drivers = [];
 
-fetch(DEVICE_URL)
-.then(r=>r.json())
-.then(d=>fetch(`${BASE_URL}/doctors/${d.assignedDoctor}.json`))
-.then(r=>r.json())
-.then(doc=>doctorEmail=doc.email)
+function fetchDrivers(){
+    fetch(`${BASE_URL}/ambulances.json`)
+    .then(res => res.json())
+    .then(data => {
+        if(!data) return;
 
-/******** LOAD PATIENT ********/
+        drivers = Object.values(data)
+            .filter(d => d.available === true)
+            .map(d => d.email);
 
-fetch(PATIENT_URL)
-.then(r=>r.json())
-.then(p=>{
-
-if(p && p.name){
-
-patientName=p.name
-patientTitle.innerHTML=`Patient: ${p.name}`
-
+        console.log("Drivers loaded:", drivers);
+    })
+    .catch(err => console.error(err));
 }
 
-})
+fetchDrivers();
 
-/******** CHARTS ********/
+/******** CHART SETUP ********/
+const commonOptions = {
+    responsive: true,
+    maintainAspectRatio: true,
+    scales: { 
+        y: { grid: { display: false }, ticks: { color: "#64748b" } },
+        x: { ticks: { display: false }, grid: { display: false } }
+    },
+    plugins: { legend: { display: false } }
+};
 
-const heartCtx=document.getElementById("heartChart").getContext("2d")
-const tempCtx=document.getElementById("tempChart").getContext("2d")
+const heartChart = new Chart(document.getElementById("heartChart"), {
+    type: "line",
+    data: { labels, datasets: [{ data: heartData, borderColor: "#fb7185", tension: 0.4, fill: true }] },
+    options: commonOptions
+});
 
-const heartChart=new Chart(heartCtx,{
-type:"line",
-data:{
-labels:labels,
-datasets:[{
-data:heartData,
-borderColor:"#fb7185",
-fill:true
-}]
-},
-options:{responsive:true,maintainAspectRatio:false}
-})
+const tempChart = new Chart(document.getElementById("tempChart"), {
+    type: "line",
+    data: { labels, datasets: [{ data: tempData, borderColor: "#fbbf24", tension: 0.4 }] },
+    options: commonOptions
+});
 
-const tempChart=new Chart(tempCtx,{
-type:"line",
-data:{
-labels:labels,
-datasets:[{
-data:tempData,
-borderColor:"#38bdf8",
-fill:true
-}]
-},
-options:{responsive:true,maintainAspectRatio:false}
-})
+const spo2Chart = new Chart(document.getElementById("spo2Chart"), {
+    type: "line",
+    data: { labels, datasets: [{ data: spo2Data, borderColor: "#38bdf8", tension: 0.4, fill: true }] },
+    options: commonOptions
+});
 
-/******** EMERGENCY CHECK ********/
+const historyChart = new Chart(document.getElementById("historyChart"), {
+    type: "line",
+    data: { labels: historyLabels, datasets: [{ data: historyRisk, borderColor: "#818cf8", fill: true }] },
+    options: commonOptions
+});
 
-function isEmergency(v){
-  return v.temperature > 37
+/******** GAUGE ********/
+const riskGauge = new Chart(document.getElementById("riskGauge"), {
+    type: "doughnut",
+    data: {
+        datasets: [{
+            data: [2,3,5],
+            backgroundColor: ["#4ade80","#fbbf24","#fb7185"],
+            circumference: 180,
+            rotation: 270,
+            cutout: "85%"
+        }]
+    },
+    options: { plugins: { legend: { display: false } } }
+});
+
+/******** HELPERS ********/
+function isIncreasing(arr){
+    return arr.length >= 3 &&
+        arr[arr.length-1] > arr[arr.length-2] &&
+        arr[arr.length-2] > arr[arr.length-3];
 }
 
-/******** EMAIL ALERT ********/
-
-function sendEmail(v){
-
-const mapLink=`https://maps.google.com/?q=${v.lat || ""},${v.lng || ""}`
-
-const templateParams={
-
-patient:patientName,
-heart:v.bpm || 0,
-temp:v.temperature || 0,
-link:mapLink,
-dashboard:"https://chaithra0926.github.io/remote-health-monitoring/",
-to_email:doctorEmail
-
+function isDecreasing(arr){
+    return arr.length >= 3 &&
+        arr[arr.length-1] < arr[arr.length-2] &&
+        arr[arr.length-2] < arr[arr.length-3];
 }
 
-emailjs.send(SERVICE_ID,TEMPLATE_ID,templateParams)
+function smooth(prev, curr){
+    return prev ? (prev + curr)/2 : curr;
+}
 
-.then(function(){
+function getBestLocation(v){
+    const gpsLat = v.lat ?? v.latitude ?? v.gpsLat;
+    const gpsLon = v.lng ?? v.lon ?? v.longitude ?? v.gpsLon;
+    const espLat = v.esp32Lat ?? v.fallbackLat ?? v.fallbackLatitude;
+    const espLon = v.esp32Lon ?? v.fallbackLng ?? v.fallbackLongitude;
 
-console.log("Email sent")
+    if(gpsLat != null && gpsLon != null){
+        return { lat: parseFloat(gpsLat), lon: parseFloat(gpsLon), source: "gps" };
+    }
+    if(espLat != null && espLon != null){
+        return { lat: parseFloat(espLat), lon: parseFloat(espLon), source: "esp32" };
+    }
+    return { lat: null, lon: null, source: null };
+}
 
-})
+/******** RISK CALCULATION ********/
+function getLevelBPM(bpm){
+    if(bpm > 140) return 3;
+    if(bpm > 120 || bpm < 50) return 2;
+    if((bpm >= 50 && bpm < 60) || (bpm > 100 && bpm <= 120)) return 1;
+    return 0;
+}
 
-.catch(function(error){
+function getLevelSpO2(spo2){
+    if(spo2 < 88) return 3;
+    if(spo2 < 92) return 2;
+    if(spo2 <= 94) return 1;
+    return 0;
+}
 
-console.log("Email error",error)
+function getLevelTemp(temp){
+    if(temp >= 40) return 3;
+    if(temp > 38.5) return 2;
+    if(temp > 37.5) return 1;
+    return 0;
+}
 
-})
+function calculateRisk(v){
 
+    const bpmL = getLevelBPM(v.bpm);
+    const spo2L = getLevelSpO2(v.spo2);
+    const tempL = getLevelTemp(v.temperature);
+
+    // 🔴 VERY CRITICAL CONDITIONS
+    if(spo2L === 3 && bpmL === 3) return 10;
+    if(spo2L === 3) return 9;
+    if(bpmL === 3 && tempL >= 2) return 9;
+
+    // 🔴 HIGH CRITICAL
+    if(spo2L === 2 && bpmL >= 2) return 8;
+    if(spo2L === 2) return 7;
+
+    // 🟡 MODERATE (WARNING)
+    if(spo2L === 1 || bpmL === 1) return 4;
+
+    // 🟢 NORMAL
+    return 1;
+}
+
+function getRiskLevel(score){
+    if(score <= 2) return "NORMAL";
+    if(score <= 5) return "WARNING";
+    return "CRITICAL";
+}
+
+function updateRiskBadge(level){
+    if(!riskBadgeEl || !riskArrowEl || !riskCaptionEl) return;
+
+    const text = level.toUpperCase();
+    let arrow = "⬇";
+    let color = "#4ade80";
+    let caption = "Stable";
+
+    if(text === "WARNING"){
+        arrow = "➡";
+        color = "#fbbf24";
+        caption = "Monitor closely";
+    } else if(text === "CRITICAL"){
+        arrow = "⬆";
+        color = "#fb7185";
+        caption = "Immediate action";
+    }
+
+    riskBadgeEl.innerText = text;
+    riskBadgeEl.className = `risk-badge ${text.toLowerCase()}`;
+    riskArrowEl.innerText = arrow;
+    riskArrowEl.style.color = color;
+    riskCaptionEl.innerText = caption;
+}
+
+/******** EMAIL ********/
+function fetchDoctorEmail(){
+    fetch(`${BASE_URL}/doctors/doctor_001.json`)
+    .then(res => res.json())
+    .then(data => {
+        if(!data) return;
+        doctorEmail = typeof data === "string" ? data : data.email || data.mail || data.contact;
+        console.log("Doctor email:", doctorEmail);
+    })
+    .catch(err => console.error("Failed to load doctor details:", err));
+}
+fetchDoctorEmail();
+function sendEmail(type, v, riskLevel){
+
+    // ❗ check if email is loaded
+    if(type === "doctor" && !doctorEmail){
+        console.log("Doctor email not loaded yet");
+        return;
+    }
+
+    const params = {
+        to_email: (type === "doctor")
+            ? doctorEmail   // 🔥 from Firebase
+            : drivers[currentDriver],
+
+        email: "system@monitor.com",
+
+        patient: "Cardiac Patient",
+        heart: v.bpm,
+        temp: v.temperature,
+        link: `https://maps.google.com/?q=${v.lat},${v.lon}`,
+        dashboard: DASHBOARD_URL
+    };
+
+    const template =
+        (type === "doctor")
+        ? "template_gdh8ki6"
+        : "template_1fowsv2";
+
+    emailjs.send("service_2orch13", template, params)
+        .then(()=>console.log("✅ Email sent"))
+        .catch(err=>console.error("❌ Error:", err));
+}
+
+/******** AMBULANCE ********/
+let dispatchTimer = null;
+let waitingForResponse = false;
+function sendNextDriver(v){
+
+    if(drivers.length === 0){
+        ambulanceStatus.innerText = "No drivers available";
+        return;
+    }
+
+    if(currentDriver >= drivers.length){
+        ambulanceStatus.innerText = "No drivers available";
+        return;
+    }
+
+    fetch(`${BASE_URL}/dispatch/responses.json`)
+        .then(res => res.json())
+        .then(data => {
+            lastResponseCount = data ? Object.values(data).length : 0;
+            lastProcessedResponse = null;
+            waitingForResponse = true;
+
+            const acceptLink = `https://chaithra0926.github.io/remote-health-monitoring/respond.html?res=accept&driver=${currentDriver}`;
+            const rejectLink = `https://chaithra0926.github.io/remote-health-monitoring/respond.html?res=reject&driver=${currentDriver}`;
+
+            emailjs.send("service_66uclpi", "template_1fowsv2", {
+                to_email: drivers[currentDriver],
+                location: `https://maps.google.com/?q=${v.lat},${v.lon}`,
+                bpm: v.bpm,
+                spo2: v.spo2,
+                temp: v.temperature,
+                accept_link: acceptLink,
+                reject_link: rejectLink
+            });
+
+            ambulanceStatus.innerText = "Request sent to Driver " + (currentDriver+1);
+
+            // ⏱ WAIT 1 MINUTE
+            dispatchTimer = setTimeout(() => {
+                if(!ambulanceAssigned){
+                    console.log("No response, moving to next driver...");
+                    currentDriver++;
+                    sendNextDriver(v);
+                }
+            }, 60000); // 1 minute
+        })
+        .catch(err => {
+            console.error("Failed to initialize dispatch response tracking:", err);
+            ambulanceStatus.innerText = "Dispatch error";
+        });
+}
+
+
+/******** MONITOR RESPONSE ********/
+function monitorDispatch(v){
+    if(!waitingForResponse) return;
+
+    fetch(`${BASE_URL}/dispatch/responses.json`)
+    .then(res => res.json())
+    .then(data => {
+
+        if(!data) return;
+
+        const responses = Object.values(data);
+        if(responses.length <= lastResponseCount) return;
+
+        const newResponses = responses.slice(lastResponseCount);
+        const last = newResponses[newResponses.length - 1];
+
+        if(last.driver != currentDriver && last.driver != String(currentDriver)) return;
+        if(lastProcessedResponse && lastProcessedResponse.response === last.response && lastProcessedResponse.driver === last.driver && lastProcessedResponse.time === last.time) return;
+
+        lastProcessedResponse = last;
+        lastResponseCount = responses.length;
+
+        if(last.response === "reject" && !ambulanceAssigned){
+            clearTimeout(dispatchTimer);
+            currentDriver++;
+            sendNextDriver(v);
+            return;
+        }
+
+        if(last.response === "accept"){
+            clearTimeout(dispatchTimer);
+            ambulanceAssigned = true;
+            waitingForResponse = false;
+            ambulanceStatus.innerText = "🚑 Ambulance Assigned";
+        }
+    });
+}
+//prediction
+function mlPredict(bpm, spo2, temp){
+
+    if(spo2 <= 91.5){
+        return 2; // CRITICAL
+    } 
+    else if(spo2 <= 94.5){
+        return 1; // WARNING
+    } 
+    else {
+        if(bpm <= 61.5){
+            return 1; // WARNING
+        } else {
+            return 0; // NORMAL
+        }
+    }
 }
 
 /******** MAIN LOOP ********/
-
 setInterval(()=>{
 
-fetch(VITALS_URL)
+    fetch(VITALS_URL)
+    .then(r=>r.json())
+    .then(v=>{
 
-.then(r=>r.json())
+        if(!v || v.bpm==null || v.temperature==null || v.spo2==null) return;
 
-.then(v=>{
+        // location fallback: prefer GPS lat/lng, otherwise use ESP32 fallback coords
+        const location = getBestLocation(v);
+        v.lat = location.lat;
+        v.lon = location.lon;
 
-if(!v) return
+        const mapLink = (location.lat != null && location.lon != null)
+            ? `https://maps.google.com/?q=${location.lat},${location.lon}`
+            : null;
 
-heartRateEl.innerHTML=`${v.bpm || 0} <span>BPM</span>`
-temperatureEl.innerHTML=`${v.temperature || 0} <span>°C</span>`
+        if(mapLink){
+            locationEl.innerText = `${location.lat.toFixed(5)}, ${location.lon.toFixed(5)} (${location.source})`;
+            locationLinkEl.href = mapLink;
+            locationLinkEl.style.display = "inline-block";
+        } else {
+            locationEl.innerText = "No valid location available";
+            locationLinkEl.style.display = "none";
+        }
 
-if(isEmergency(v)){
+        // smooth
+        v.bpm = smooth(heartData.at(-1), v.bpm);
+        v.temperature = parseFloat(v.temperature);
 
-statusEl.textContent="EMERGENCY"
-statusEl.style.color="#fb7185"
+        // UI
+        heartRateEl.innerText = v.bpm.toFixed(0);
+        temperatureEl.innerText = v.temperature;
+        spo2El.innerText = v.spo2;
 
-if(!emergencyStartTime){
+        // Risk
+        const riskScore = calculateRisk(v);
+        const riskLevel = getRiskLevel(riskScore);
+        const mlResult = mlPredict(v.bpm, v.spo2, v.temperature);
+        const mlLevel = ML_LABELS[mlResult];
 
-emergencyStartTime=Date.now()
+        const finalLevel =
+        (mlLevel === "CRITICAL" || riskLevel === "CRITICAL") ? "CRITICAL" :
+        (mlLevel === "WARNING" || riskLevel === "WARNING") ? "WARNING" :
+        "NORMAL";
 
-}
+        statusEl.innerText = finalLevel;
+        riskScoreDisplay.innerText = riskScore;
+        updateRiskBadge(finalLevel);
 
-if(Date.now()-emergencyStartTime>=EMERGENCY_CONFIRM_TIME && !alertSent){
+        // color
+        statusEl.style.color =
+            finalLevel==="NORMAL"?"#4ade80":
+            finalLevel==="WARNING"?"#fbbf24":"#fb7185";
 
-sendEmail(v)
-alertSent=true
+        // email trigger
+        if(finalLevel !== lastAlert){
+            if(finalLevel === "WARNING" || finalLevel === "CRITICAL"){
+                sendEmail("doctor", v, finalLevel);
+            }
 
-}
+            if(finalLevel === "CRITICAL" && !waitingForResponse){
+                if(drivers.length === 0){
+                    console.log("Waiting for drivers...");
+                    return;
+                }
+                lastProcessedResponse = null;
+                currentDriver = 0;
+                ambulanceAssigned = false;
 
-}else{
+                sendNextDriver(v);
+            }
 
-statusEl.textContent="NORMAL"
-statusEl.style.color="#4ade80"
+            lastAlert = finalLevel;
+        }
 
-emergencyStartTime=null
-alertSent=false
+        monitorDispatch(v);
+        // history save
+        if(Date.now()-lastSavedTime > SAVE_INTERVAL){
+            fetch(HISTORY_URL,{
+                method:"POST",
+                body:JSON.stringify({
+                    risk:riskScore,
+                    time:new Date().toLocaleTimeString()
+                })
+            });
+            lastSavedTime = Date.now();
+        }
 
-}
+        // charts
+        const now = new Date().toLocaleTimeString();
 
-const time=new Date().toLocaleTimeString()
+        labels.push(now);
+        heartData.push(v.bpm);
+        tempData.push(v.temperature);
+        spo2Data.push(v.spo2);
 
-labels.push(time)
-heartData.push(v.heartRate || 0)
-tempData.push(v.temperature || 0)
+        if(labels.length>10){
+            labels.shift();
+            heartData.shift();
+            tempData.shift();
+            spo2Data.shift();
+        }
 
-if(labels.length>10){
+        historyLabels.push(now);
+        historyRisk.push(riskScore);
 
-labels.shift()
-heartData.shift()
-tempData.shift()
+        if(historyLabels.length>15){
+            historyLabels.shift();
+            historyRisk.shift();
+        }
 
-}
+        heartChart.update();
+        tempChart.update();
+        spo2Chart.update();
+        historyChart.update();
 
-heartChart.update()
-tempChart.update()
+    })
+    .catch(()=>{
+        statusEl.innerText="DISCONNECTED";
+        statusEl.style.color="gray";
+    });
 
-})
-
-},1000)
-
-/******** AMBULANCE DISPATCH ********/
-
-const dispatchBtn=document.getElementById("dispatchBtn")
-
-dispatchBtn.addEventListener("click",dispatchAmbulance)
-
-function dispatchAmbulance(){
-
-fetch(`${BASE_URL}/ambulances.json`)
-
-.then(res=>res.json())
-
-.then(data=>{
-
-const ambulances=Object.entries(data)
-
-for(let [id,amb] of ambulances){
-
-if(amb.available){
-
-alert("Ambulance contacted: "+amb.name)
-
-fetch(`${BASE_URL}/ambulances/${id}.json`,{
-
-method:"PATCH",
-headers:{'Content-Type':'application/json'},
-body:JSON.stringify({
-
-available:false
-
-})
-
-})
-
-return
-
-}
-
-}
-
-alert("No ambulance available")
-
-})
-
-}
+},2000);
