@@ -1,111 +1,129 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cardiac Emergency Monitoring Dashboard</title>
 
-<meta charset="UTF-8">
-
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>Remote Health Monitoring</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-
-<link rel="stylesheet" href="style.css">
-
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
 <header>
+    <div id="patient-info">
+        <span id="patientName">Loading...</span> |
+        <span id="patientDetails">Loading...</span>
+    </div>
 
-<h1 id="patientTitle">
-Remote Health Monitoring <span>Dashboard</span>
-</h1>
-
-<div id="live-indicator">
-<span class="dot"></span> Live Monitoring Active
-</div>
-
+    <h1>Cardiac Emergency Monitoring <span>Dashboard</span></h1>
+    <p class="subtitle">Real-time vitals, risk scoring, and dispatch status for critical cardiac care.</p>
+    <div id="live-indicator">
+        <span class="dot"></span> Live Monitoring Active
+    </div>
 </header>
 
 <div class="main-container">
 
-<!-- Vital Stats -->
+    <!-- ====== STATS ====== -->
+    <div class="stats-row">
 
-<div class="stats-row">
+        <div class="card stat-card">
+            <h2>Heart Rate</h2>
+            <p><span id="heartRate">--</span> <small>BPM</small></p>
+        </div>
 
-<div class="card stat-card">
-<h2>Heart Rate</h2>
-<p id="heartRate">-- <span>BPM</span></p>
+        <div class="card stat-card">
+            <h2>Temperature</h2>
+            <p><span id="temperature">--</span> <small>°C</small></p>
+        </div>
+
+        <div class="card stat-card">
+            <h2>SpO₂</h2>
+            <p><span id="spo2">--</span> <small>%</small></p>
+        </div>
+
+        <div class="card stat-card">
+            <h2>Status</h2>
+            <p id="status" class="status-text">CONNECTING</p>
+        </div>
+
+        <!-- AMBULANCE -->
+        <div class="card stat-card">
+            <h2>Ambulance</h2>
+            <p id="ambulanceStatus">Not Dispatched</p>
+        </div>
+
+        <div class="card stat-card location-card">
+            <h2>Location</h2>
+            <p id="location">Waiting for coordinates...</p>
+            <a id="locationLink" class="link-button" href="#" target="_blank" rel="noreferrer">Open in Maps</a>
+        </div>
+
+    </div>
+
+    <!-- ====== CHARTS ====== -->
+    <div class="charts-row">
+
+        <div class="card chart-card">
+            <h2>Heart Rate Analysis</h2>
+            <canvas id="heartChart"></canvas>
+        </div>
+
+        <div class="card chart-card">
+            <h2>Temperature Trend</h2>
+            <canvas id="tempChart"></canvas>
+        </div>
+
+        <div class="card chart-card">
+            <h2>SpO₂ Levels</h2>
+            <canvas id="spo2Chart"></canvas>
+        </div>
+
+        <!-- RISK GAUGE -->
+        <div class="card chart-card risk-meter-container">
+            <div class="risk-header">
+                <div>
+                    <h2>Health Risk Index</h2>
+                    <p class="risk-subtitle">Live score with trend and alert status.</p>
+                </div>
+                <div class="risk-chip-row">
+                    <span id="risk-level-badge" class="risk-badge normal">NORMAL</span>
+                    <span id="risk-arrow" class="risk-arrow">⬇</span>
+                </div>
+            </div>
+
+            <div class="gauge-box">
+                <canvas id="riskGauge"></canvas>
+
+                <div class="gauge-center">
+                    <span id="risk-score-display">0</span>
+                    <small id="risk-caption">Stable</small>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ====== HISTORY ====== -->
+    <div class="card history-card">
+        <h2>Risk History (Last 15 Records)</h2>
+        <canvas id="historyChart"></canvas>
+    </div>
+
 </div>
 
-<div class="card stat-card">
-<h2>Temperature</h2>
-<p id="temperature">-- <span>°C</span></p>
-</div>
+<!-- ====== AUDIO ALERT ====== -->
+<audio id="alarmSound" preload="auto">
+    <source src="alarm.mp3" type="audio/mpeg">
+</audio>
 
-<div class="card stat-card status">
-<h2>Patient Status</h2>
-<p id="status">CONNECTING...</p>
-</div>
-
-</div>
-
-<!-- Charts -->
-
-<div class="charts-row">
-
-<div class="card chart-card">
-
-<h2>Heart Rate Analytics</h2>
-
-<div class="canvas-container">
-<canvas id="heartChart"></canvas>
-</div>
-
-</div>
-
-<div class="card chart-card">
-
-<h2>Temperature Analytics</h2>
-
-<div class="canvas-container">
-<canvas id="tempChart"></canvas>
-</div>
-
-</div>
-
-</div>
-
-<!-- Ambulance Dispatch -->
-
-<div class="stats-row">
-
-<div class="card stat-card">
-
-<h2>Emergency Response</h2>
-
-<button id="dispatchBtn">
-Dispatch Ambulance
-</button>
-
-</div>
-
-</div>
-
-</div>
-
-<!-- Libraries -->
-
+<!-- ====== LIBRARIES ====== -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
 <script src="https://cdn.jsdelivr.net/npm/emailjs-com@3/dist/email.min.js"></script>
 
-<!-- Script -->
-
-<script src="script.js?v=3"></script>
+<!-- ====== MAIN SCRIPT ====== -->
+<script src="script.js"></script>
 
 </body>
-
 </html>
