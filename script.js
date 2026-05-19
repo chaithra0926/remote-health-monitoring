@@ -38,8 +38,9 @@ let dispatchEmailSent = false;  // 🚑 Track if dispatch email was already sent
 let ambulanceAssigned = false;
 let currentDriver = 0;
 let lastProcessedResponse = null;
-let lastResponseCount = 0;
-/****new****/
+let lastResponseCount = 0;let consecutiveSeverityCount = 0; // 🔁 Count repeated WARNING/CRITICAL readings
+let consecutiveSeverityLevel = "NORMAL";
+const ALERT_PERSISTENCE_THRESHOLD = 3;/****new****/
 const patientNameEl = document.getElementById("patientName");
 const patientDetailsEl = document.getElementById("patientDetails");
 
@@ -500,27 +501,39 @@ mainMonitorInterval = setInterval(()=>{
             finalLevel==="NORMAL"?"#4ade80":
             finalLevel==="WARNING"?"#fbbf24":"#fb7185";
 
-        // email trigger
-        if(finalLevel !== lastAlert){
-            // 🔴 Reset email flags when alert level changes
+        // track alert persistence
+        const isAlertLevel = finalLevel === "WARNING" || finalLevel === "CRITICAL";
+
+        if (isAlertLevel && finalLevel === consecutiveSeverityLevel){
+            consecutiveSeverityCount++;
+        } else if (isAlertLevel) {
+            consecutiveSeverityLevel = finalLevel;
+            consecutiveSeverityCount = 1;
+        } else {
+            consecutiveSeverityLevel = "NORMAL";
+            consecutiveSeverityCount = 0;
+        }
+
+        // email trigger only after persistent alert readings
+        if (finalLevel !== lastAlert){
             alertEmailSent = false;
             dispatchEmailSent = false;
         }
 
-        // Send email ONLY ONCE per alert (not on every update)
-        if((finalLevel === "WARNING" || finalLevel === "CRITICAL") && !alertEmailSent){
+        if (consecutiveSeverityCount >= ALERT_PERSISTENCE_THRESHOLD && isAlertLevel && !alertEmailSent){
             sendEmail("doctor", v, finalLevel);
-            alertEmailSent = true;  // Mark email as sent
+            alertEmailSent = true;
         }
 
-        // Reset when back to normal
-        if(finalLevel === "NORMAL"){
+        if (finalLevel === "NORMAL"){
             alertEmailSent = false;
             dispatchEmailSent = false;
+            consecutiveSeverityCount = 0;
+            consecutiveSeverityLevel = "NORMAL";
         }
 
-        // 🚑 Send dispatch ONLY ONCE per CRITICAL incident
-        if(finalLevel === "CRITICAL" && !waitingForResponse && !dispatchEmailSent){
+        // 🚑 Send dispatch ONLY after 3 consecutive CRITICAL readings
+        if (finalLevel === "CRITICAL" && consecutiveSeverityCount >= ALERT_PERSISTENCE_THRESHOLD && !waitingForResponse && !dispatchEmailSent){
             if(drivers.length === 0){
                 console.log("Waiting for drivers...");
                 return;
@@ -528,9 +541,9 @@ mainMonitorInterval = setInterval(()=>{
             lastProcessedResponse = null;
             currentDriver = 0;
             ambulanceAssigned = false;
-            dispatchEmailSent = true;  // Mark dispatch as sent
+            dispatchEmailSent = true;
 
-            sendNextDriver(v, true);  // Send email to first driver
+            sendNextDriver(v, true);
         }
 
         lastAlert = finalLevel;
