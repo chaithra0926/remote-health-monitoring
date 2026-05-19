@@ -38,9 +38,11 @@ let dispatchEmailSent = false;  // 🚑 Track if dispatch email was already sent
 let ambulanceAssigned = false;
 let currentDriver = 0;
 let lastProcessedResponse = null;
-let lastResponseCount = 0;let consecutiveSeverityCount = 0; // 🔁 Count repeated WARNING/CRITICAL readings
+let lastResponseCount = 0;
+let consecutiveSeverityCount = 0; // 🔁 Count repeated WARNING/CRITICAL readings
 let consecutiveSeverityLevel = "NORMAL";
-const ALERT_PERSISTENCE_THRESHOLD = 3;/****new****/
+const ALERT_PERSISTENCE_THRESHOLD = 5;
+/****new****/
 const patientNameEl = document.getElementById("patientName");
 const patientDetailsEl = document.getElementById("patientDetails");
 
@@ -153,24 +155,25 @@ function getBestLocation(v){
 
 /******** RISK CALCULATION ********/
 function getLevelBPM(bpm){
-    if(bpm > 140) return 3;
-    if(bpm > 120 || bpm < 50) return 2;
-    if((bpm >= 50 && bpm < 60) || (bpm > 100 && bpm <= 120)) return 1;
-    return 0;
+    if (bpm < 40) return 3;          // Bradycardia (Critical)
+    if (bpm <= 59) return 2;         // Bradycardia (Warning)
+    if (bpm <= 100) return 0;        // Normal
+    if (bpm <= 130) return 2;        // Tachycardia (Warning)
+    return 3;                        // Tachycardia (Critical)
 }
 
 function getLevelSpO2(spo2){
-    if(spo2 < 88) return 3;
-    if(spo2 < 92) return 2;
-    if(spo2 <= 94) return 1;
-    return 0;
+    if (spo2 < 90) return 3;         // Critical
+    if (spo2 <= 94) return 2;        // Warning
+    return 0;                        // Normal
 }
 
 function getLevelTemp(temp){
-    if(temp >= 40) return 3;
-    if(temp > 38.5) return 2;
-    if(temp > 37.5) return 1;
-    return 0;
+    if (temp < 35.0) return 3;       // Hypothermia (Critical)
+    if (temp <= 36.0) return 2;      // Hypothermia (Warning)
+    if (temp <= 37.2) return 0;      // Normal
+    if (temp <= 38.9) return 2;      // Fever (Warning)
+    return 3;                        // High Fever (Critical)
 }
 
 function calculateRisk(v){
@@ -180,21 +183,10 @@ function calculateRisk(v){
     const tempL = getLevelTemp(v.temperature);
 
     // 🔴 VERY CRITICAL CONDITIONS
-    // Both very low SpO2 and very high BPM -> highest score
-    if (spo2L === 3 && bpmL === 3) return 10;
+    if (spo2L === 3 || bpmL === 3 || tempL === 3) return 9;
 
-    // Any very low SpO2 is critical
-    if (spo2L === 3) return 9;
-
-    // Any very high BPM alone should be treated as critical
-    if (bpmL === 3) return 9;
-
-    // 🔴 HIGH CRITICAL
-    if (spo2L === 2 && bpmL >= 2) return 8;
-    if (spo2L === 2) return 7;
-
-    // 🟡 MODERATE (WARNING)
-    if (spo2L === 1 || bpmL === 1) return 4;
+    // 🟡 WARNING CONDITIONS
+    if (spo2L === 2 || bpmL === 2 || tempL === 2) return 5;
 
     // 🟢 NORMAL
     return 1;
@@ -429,20 +421,13 @@ function stopMonitoringDispatch(){
 }
 //prediction
 function mlPredict(bpm, spo2, temp){
-
-    if(spo2 <= 91.5){
-        return 2; // CRITICAL
-    } 
-    else if(spo2 <= 94.5){
-        return 1; // WARNING
-    } 
-    else {
-        if(bpm <= 61.5){
-            return 1; // WARNING
-        } else {
-            return 0; // NORMAL
-        }
-    }
+    if (spo2 < 90) return 2;                   // SpO2 Critical
+    if (spo2 <= 94) return 1;                  // SpO2 Warning
+    if (bpm < 40 || bpm > 130) return 2;       // BPM Critical
+    if (bpm <= 59 || bpm >= 101) return 1;     // BPM Warning
+    if (temp < 35.0 || temp >= 39.0) return 2; // Temp Critical
+    if (temp <= 36.0 || temp >= 37.3) return 1; // Temp Warning
+    return 0;                                  // Normal
 }
 
 /******** MAIN LOOP ********/
