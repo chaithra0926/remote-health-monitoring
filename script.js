@@ -157,7 +157,7 @@ function getBestLocation(v){
 function getLevelBPM(bpm){
     if (bpm < 40) return 3;          // Bradycardia (Critical)
     if (bpm <= 59) return 2;         // Bradycardia (Warning)
-    if (bpm <= 100) return 0;        // Normal
+    if (bpm <= 120) return 0;        // Normal
     if (bpm <= 130) return 2;        // Tachycardia (Warning)
     return 3;                        // Tachycardia (Critical)
 }
@@ -169,7 +169,7 @@ function getLevelSpO2(spo2){
 }
 
 function getLevelTemp(temp){
-    if (temp < 35.0) return 3;       // Hypothermia (Critical)
+    if (temp < 34.0) return 3;       // Hypothermia (Critical)
     if (temp <= 36.0) return 2;      // Hypothermia (Warning)
     if (temp <= 37.2) return 0;      // Normal
     if (temp <= 38.9) return 2;      // Fever (Warning)
