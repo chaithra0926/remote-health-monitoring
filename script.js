@@ -155,10 +155,11 @@ function getBestLocation(v){
 
 /******** RISK CALCULATION ********/
 function getLevelBPM(bpm){
-if(bpm > 140) return 3;
-if(bpm > 120 || bpm < 50) return 2;
-if((bpm >= 50 && bpm < 60) || (bpm > 100 && bpm <= 120)) return 1;
-return 0;
+    if(bpm > 140) return 3;                                           // Critical
+    if(bpm >= 130 && bpm <= 140) return 2;                           // Critical
+    if((bpm >= 50 && bpm < 60) || (bpm > 100 && bpm < 130)) return 1; // Warning: 101-129
+    if(bpm < 50) return 2;                                            // Critical
+    return 0;                                                          // Normal: 60-100
 }
 function getLevelSpO2(spo2){
 if(spo2 < 88) return 3;
