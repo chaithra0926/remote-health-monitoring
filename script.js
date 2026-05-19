@@ -169,8 +169,6 @@ function getLevelSpO2(spo2){
 }
 
 function getLevelTemp(temp){
-    if (temp < 34.0) return 3;       // Hypothermia (Critical)
-    if (temp <= 36.0) return 2;      // Hypothermia (Warning)
     if (temp <= 37.2) return 0;      // Normal
     if (temp <= 38.9) return 2;      // Fever (Warning)
     return 3;                        // High Fever (Critical)
