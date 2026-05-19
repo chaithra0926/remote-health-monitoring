@@ -4,7 +4,6 @@ const BASE_URL = "https://iot-miniproject-8582d-default-rtdb.firebaseio.com";
 
 const VITALS_URL = `${BASE_URL}/vitals/${DEVICE_ID}.json`;
 const HISTORY_URL = `${BASE_URL}/history/${DEVICE_ID}.json`;
-const DISPATCH_URL = `${BASE_URL}/dispatch/responses.json`;
 const DASHBOARD_URL = "https://chaithra0926.github.io/remote-health-monitoring/";
 
 emailjs.init("8qKYU9gdC9ftK1Xdo");
@@ -30,9 +29,12 @@ let doctorEmail = "";
 let lastSavedTime = 0;
 const SAVE_INTERVAL = 10000;
 
+let mainMonitorInterval = null;  // ✅ Track main vitals monitoring
+
 /******** ALERT CONTROL ********/
 let lastAlert = "NORMAL";
 let alertEmailSent = false;  // 🔴 Track if alert email was already sent
+let dispatchEmailSent = false;  // 🚑 Track if dispatch email was already sent for current incident
 let ambulanceAssigned = false;
 let currentDriver = 0;
 let lastProcessedResponse = null;
@@ -127,19 +129,8 @@ const riskGauge = new Chart(document.getElementById("riskGauge"), {
     options: { plugins: { legend: { display: false } } }
 });
 
+
 /******** HELPERS ********/
-function isIncreasing(arr){
-    return arr.length >= 3 &&
-        arr[arr.length-1] > arr[arr.length-2] &&
-        arr[arr.length-2] > arr[arr.length-3];
-}
-
-function isDecreasing(arr){
-    return arr.length >= 3 &&
-        arr[arr.length-1] < arr[arr.length-2] &&
-        arr[arr.length-2] < arr[arr.length-3];
-}
-
 function smooth(prev, curr){
     return prev ? (prev + curr)/2 : curr;
 }
@@ -188,16 +179,21 @@ function calculateRisk(v){
     const tempL = getLevelTemp(v.temperature);
 
     // 🔴 VERY CRITICAL CONDITIONS
-    if(spo2L === 3 && bpmL === 3) return 10;
-    if(spo2L === 3) return 9;
-    if(bpmL === 3 && tempL >= 2) return 9;
+    // Both very low SpO2 and very high BPM -> highest score
+    if (spo2L === 3 && bpmL === 3) return 10;
+
+    // Any very low SpO2 is critical
+    if (spo2L === 3) return 9;
+
+    // Any very high BPM alone should be treated as critical
+    if (bpmL === 3) return 9;
 
     // 🔴 HIGH CRITICAL
-    if(spo2L === 2 && bpmL >= 2) return 8;
-    if(spo2L === 2) return 7;
+    if (spo2L === 2 && bpmL >= 2) return 8;
+    if (spo2L === 2) return 7;
 
     // 🟡 MODERATE (WARNING)
-    if(spo2L === 1 || bpmL === 1) return 4;
+    if (spo2L === 1 || bpmL === 1) return 4;
 
     // 🟢 NORMAL
     return 1;
@@ -254,6 +250,12 @@ function sendEmail(type, v, riskLevel){
         return;
     }
 
+    // ❗ VALIDATE COORDINATES
+    if(v.lat == null || v.lon == null || isNaN(v.lat) || isNaN(v.lon)){
+        console.error("Invalid coordinates, skipping email");
+        return;
+    }
+
     const params = {
         to_email: (type === "doctor")
             ? doctorEmail   // 🔥 from Firebase
@@ -274,14 +276,21 @@ function sendEmail(type, v, riskLevel){
         : "template_1fowsv2";
 
     emailjs.send("service_2orch13", template, params)
-        .then(()=>console.log("✅ Email sent"))
-        .catch(err=>console.error("❌ Error:", err));
+        .then(()=>console.log("✅ Email sent to", type))
+        .catch(err=>{
+            console.error("❌ Email Error:", err.message);
+            alert(`Email sending failed: ${err.message}`);
+        });
 }
 
 /******** AMBULANCE ********/
 let dispatchTimer = null;
+let monitorInterval = null;  // ✅ Track polling interval
 let waitingForResponse = false;
-function sendNextDriver(v){
+const DISPATCH_TIMEOUT = 60000;  // 1 minute per driver
+const MONITOR_POLL_INTERVAL = 3000;  // Poll every 3 seconds (was 2s)
+
+function sendNextDriver(v, sendEmail = true){  // 🔴 Only send email on first call
 
     if(drivers.length === 0){
         ambulanceStatus.innerText = "No drivers available";
@@ -290,6 +299,7 @@ function sendNextDriver(v){
 
     if(currentDriver >= drivers.length){
         ambulanceStatus.innerText = "No drivers available";
+        console.log("All drivers exhausted");
         return;
     }
 
@@ -299,41 +309,55 @@ function sendNextDriver(v){
             lastResponseCount = data ? Object.values(data).length : 0;
             lastProcessedResponse = null;
             waitingForResponse = true;
+            
+            // ✅ Start monitoring only after request sent
+            startMonitoringDispatch(v);
 
-            const acceptLink = `https://chaithra0926.github.io/remote-health-monitoring/respond.html?res=accept&driver=${currentDriver}`;
-            const rejectLink = `https://chaithra0926.github.io/remote-health-monitoring/respond.html?res=reject&driver=${currentDriver}`;
+            // 🔴 ONLY send email if this is the first dispatch attempt
+            if(sendEmail && drivers[currentDriver]){
+                const acceptLink = `https://chaithra0926.github.io/remote-health-monitoring/respond.html?res=accept&driver=${currentDriver}`;
+                const rejectLink = `https://chaithra0926.github.io/remote-health-monitoring/respond.html?res=reject&driver=${currentDriver}`;
 
-            emailjs.send("service_66uclpi", "template_1fowsv2", {
-                to_email: drivers[currentDriver],
-                location: `https://maps.google.com/?q=${v.lat},${v.lon}`,
-                bpm: v.bpm,
-                spo2: v.spo2,
-                temp: v.temperature,
-                accept_link: acceptLink,
-                reject_link: rejectLink
-            });
+                emailjs.send("service_2orch13", "template_1fowsv2", {
+                    to_email: drivers[currentDriver],
+                    location: `https://maps.google.com/?q=${v.lat},${v.lon}`,
+                    bpm: v.bpm,
+                    spo2: v.spo2,
+                    temp: v.temperature,
+                    accept_link: acceptLink,
+                    reject_link: rejectLink
+                })
+                .then(()=>{
+                    console.log("📧 Dispatch email sent to Driver " + (currentDriver+1));
+                    dispatchEmailSent = true;
+                })
+                .catch(err=>{
+                    console.error("❌ Failed to send dispatch email:", err);
+                    ambulanceStatus.innerText = "Email dispatch failed";
+                });
+            }
 
             ambulanceStatus.innerText = "Request sent to Driver " + (currentDriver+1);
 
-            // ⏱ WAIT 1 MINUTE
+            // ⏱ WAIT TIMEOUT BEFORE TRYING NEXT DRIVER
             dispatchTimer = setTimeout(() => {
-                if(!ambulanceAssigned){
+                if(!ambulanceAssigned && waitingForResponse){
                     console.log("No response, moving to next driver...");
                     currentDriver++;
-                    sendNextDriver(v);
+                    sendNextDriver(v, true);  // Send email to next driver
                 }
-            }, 60000); // 1 minute
+            }, DISPATCH_TIMEOUT);
         })
         .catch(err => {
-            console.error("Failed to initialize dispatch response tracking:", err);
+            console.error("❌ Failed to initialize dispatch:", err);
             ambulanceStatus.innerText = "Dispatch error";
+            waitingForResponse = false;
         });
 }
 
-
-/******** MONITOR RESPONSE ********/
-function monitorDispatch(v){
-    if(!waitingForResponse) return;
+/******** MONITOR RESPONSE - OPTIMIZED ********/
+function monitorDispatchOnce(v){
+    if(!waitingForResponse || !v) return;
 
     fetch(`${BASE_URL}/dispatch/responses.json`)
     .then(res => res.json())
@@ -347,7 +371,10 @@ function monitorDispatch(v){
         const newResponses = responses.slice(lastResponseCount);
         const last = newResponses[newResponses.length - 1];
 
+        // ✅ Validate driver match
         if(last.driver != currentDriver && last.driver != String(currentDriver)) return;
+        
+        // ✅ Prevent duplicate processing
         if(lastProcessedResponse && lastProcessedResponse.response === last.response && lastProcessedResponse.driver === last.driver && lastProcessedResponse.time === last.time) return;
 
         lastProcessedResponse = last;
@@ -356,7 +383,16 @@ function monitorDispatch(v){
         if(last.response === "reject" && !ambulanceAssigned){
             clearTimeout(dispatchTimer);
             currentDriver++;
-            sendNextDriver(v);
+            
+            // ✅ Check if there are more drivers available
+            if(currentDriver < drivers.length){
+                console.log("Driver rejected, trying next driver...");
+                sendNextDriver(v, true);
+            } else {
+                console.log("All drivers rejected");
+                waitingForResponse = false;
+                ambulanceStatus.innerText = "All drivers unavailable";
+            }
             return;
         }
 
@@ -365,8 +401,30 @@ function monitorDispatch(v){
             ambulanceAssigned = true;
             waitingForResponse = false;
             ambulanceStatus.innerText = "🚑 Ambulance Assigned";
+            console.log("✅ Driver accepted dispatch");
+            
+            // ✅ Stop polling once accepted
+            stopMonitoringDispatch();
         }
+    })
+    .catch(err => {
+        console.error("❌ Error monitoring dispatch:", err);
     });
+}
+
+// ✅ START/STOP MONITORING to avoid continuous polling
+function startMonitoringDispatch(v){
+    stopMonitoringDispatch();  // Clear any existing interval
+    monitorInterval = setInterval(() => monitorDispatchOnce(v), MONITOR_POLL_INTERVAL);
+    console.log("📡 Started monitoring dispatch responses");
+}
+
+function stopMonitoringDispatch(){
+    if(monitorInterval){
+        clearInterval(monitorInterval);
+        monitorInterval = null;
+        console.log("📡 Stopped monitoring dispatch responses");
+    }
 }
 //prediction
 function mlPredict(bpm, spo2, temp){
@@ -387,7 +445,7 @@ function mlPredict(bpm, spo2, temp){
 }
 
 /******** MAIN LOOP ********/
-setInterval(()=>{
+mainMonitorInterval = setInterval(()=>{
 
     fetch(VITALS_URL)
     .then(r=>r.json())
@@ -444,8 +502,9 @@ setInterval(()=>{
 
         // email trigger
         if(finalLevel !== lastAlert){
-            // 🔴 Reset email flag when alert level changes
+            // 🔴 Reset email flags when alert level changes
             alertEmailSent = false;
+            dispatchEmailSent = false;
         }
 
         // Send email ONLY ONCE per alert (not on every update)
@@ -457,9 +516,11 @@ setInterval(()=>{
         // Reset when back to normal
         if(finalLevel === "NORMAL"){
             alertEmailSent = false;
+            dispatchEmailSent = false;
         }
 
-        if(finalLevel === "CRITICAL" && !waitingForResponse){
+        // 🚑 Send dispatch ONLY ONCE per CRITICAL incident
+        if(finalLevel === "CRITICAL" && !waitingForResponse && !dispatchEmailSent){
             if(drivers.length === 0){
                 console.log("Waiting for drivers...");
                 return;
@@ -467,13 +528,23 @@ setInterval(()=>{
             lastProcessedResponse = null;
             currentDriver = 0;
             ambulanceAssigned = false;
+            dispatchEmailSent = true;  // Mark dispatch as sent
 
-            sendNextDriver(v);
+            sendNextDriver(v, true);  // Send email to first driver
         }
 
         lastAlert = finalLevel;
 
-        monitorDispatch(v);
+        // ✅ CLEANUP: Stop monitoring and reset when returning to NORMAL
+        if(finalLevel === "NORMAL" && waitingForResponse){
+            console.log("Status returned to NORMAL, cleanup dispatch monitoring");
+            stopMonitoringDispatch();
+            waitingForResponse = false;
+            ambulanceAssigned = false;
+            currentDriver = 0;
+            clearTimeout(dispatchTimer);
+        }
+
         // history save
         if(Date.now()-lastSavedTime > SAVE_INTERVAL){
             fetch(HISTORY_URL,{
@@ -482,7 +553,8 @@ setInterval(()=>{
                     risk:riskScore,
                     time:new Date().toLocaleTimeString()
                 })
-            });
+            })
+            .catch(err => console.error("Failed to save history:", err));
             lastSavedTime = Date.now();
         }
 
@@ -515,9 +587,26 @@ setInterval(()=>{
         historyChart.update();
 
     })
-    .catch(()=>{
+    .catch((err)=>{
         statusEl.innerText="DISCONNECTED";
         statusEl.style.color="gray";
+        console.error("Data fetch failed:", err);
+        
+        // ✅ CLEANUP on disconnect
+        stopMonitoringDispatch();
+        clearTimeout(dispatchTimer);
+        waitingForResponse = false;
     });
 
 },2000);
+
+/******** CLEANUP ON PAGE UNLOAD ********/
+window.addEventListener('beforeunload', () => {
+    console.log("🧹 Cleaning up resources...");
+    
+    if(mainMonitorInterval) clearInterval(mainMonitorInterval);
+    stopMonitoringDispatch();
+    clearTimeout(dispatchTimer);
+    
+    console.log("✅ Cleanup complete");
+});
