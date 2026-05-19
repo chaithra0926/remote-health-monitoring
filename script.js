@@ -472,12 +472,13 @@ mainMonitorInterval = setInterval(()=>{
             locationLinkEl.style.display = "none";
         }
 
-        // smooth
+        // smooth and normalize BPM to match displayed value
         v.bpm = smooth(heartData.at(-1), v.bpm);
+        v.bpm = Math.round(v.bpm);
         v.temperature = parseFloat(v.temperature);
 
         // UI
-        heartRateEl.innerText = v.bpm.toFixed(0);
+        heartRateEl.innerText = v.bpm;
         temperatureEl.innerText = v.temperature;
         spo2El.innerText = v.spo2;
 
