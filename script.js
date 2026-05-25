@@ -248,9 +248,9 @@ function computeCRI(v) {
         // Weighted aggregate
         let cri = Math.round(spo2Score * 0.45 + bpmScore * 0.35 + tempScore * 0.20);
 
-        // If fever is critical, force the CRI into a strong critical range.
+        // If fever is critical, force the CRI to the maximum critical range.
         if (temp > 38.5) {
-            cri = Math.max(cri, 90);
+            cri = 100;
         }
 
         // Map numeric CRI to level
@@ -518,7 +518,10 @@ mainMonitorInterval = setInterval(() => {
             // Compute numeric CRI and combine with ML prediction
             const { cri, level: criLevel } = computeCRI(v);
             const combinedResult = combineCRIandML(cri, mlResult, criLevel);
-            const finalLevel = combinedResult.level;
+            let finalLevel = combinedResult.level;
+            if (v.temperature > 38.5) {
+                finalLevel = "CRITICAL";
+            }
 
             statusEl.innerText = finalLevel;
             riskScoreDisplay.innerText = `${combinedResult.combined} (CRI:${cri}, ML:${mlLevel})`;
