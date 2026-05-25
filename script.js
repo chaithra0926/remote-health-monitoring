@@ -246,7 +246,12 @@ function computeCRI(v) {
         else tempScore = 50; // mild hypothermia
 
         // Weighted aggregate
-        const cri = Math.round(spo2Score * 0.45 + bpmScore * 0.35 + tempScore * 0.20);
+        let cri = Math.round(spo2Score * 0.45 + bpmScore * 0.35 + tempScore * 0.20);
+
+        // If fever is critical, force the CRI into a strong critical range.
+        if (temp > 38.5) {
+            cri = Math.max(cri, 90);
+        }
 
         // Map numeric CRI to level
         let level = "NORMAL";
@@ -256,15 +261,20 @@ function computeCRI(v) {
         return { cri, level };
 }
 
-function combineCRIandML(criValue, mlResult) {
+function combineCRIandML(criValue, mlResult, criLevel) {
         const mlScore = Math.round((mlResult / 2) * 100); // 0 -> 0, 1 -> 50, 2 -> 100
 
         // weights: CRI 60%, ML 40%
         const combined = Math.round(criValue * 0.6 + mlScore * 0.4);
 
         let level = "NORMAL";
-        if (combined > 70) level = "CRITICAL";
-        else if (combined > 40) level = "WARNING";
+        if (criLevel === "CRITICAL" || mlResult === 2) {
+            level = "CRITICAL";
+        } else if (combined > 70) {
+            level = "CRITICAL";
+        } else if (combined > 40) {
+            level = "WARNING";
+        }
 
         return { combined, level };
 }
@@ -507,7 +517,7 @@ mainMonitorInterval = setInterval(() => {
 
             // Compute numeric CRI and combine with ML prediction
             const { cri, level: criLevel } = computeCRI(v);
-            const combinedResult = combineCRIandML(cri, mlResult);
+            const combinedResult = combineCRIandML(cri, mlResult, criLevel);
             const finalLevel = combinedResult.level;
 
             statusEl.innerText = finalLevel;
