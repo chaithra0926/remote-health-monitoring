@@ -1,14 +1,3 @@
-/**************************************************************
- * CARDIAC EMERGENCY MONITORING AND AMBULANCE ALERT SYSTEM
- * Corrected Logic - Aligned with Project Report
- * Corrections applied to:
- *   1. getLevelBPM()     - Fixed boundary ranges
- *   2. getLevelSpO2()    - Fixed Critical threshold
- *   3. getLevelTemp()    - Fixed Critical threshold
- *   4. mlPredict()       - Fixed BPM boundary + added Temperature logic
- *   5. Main Loop         - Added persistence threshold to email trigger
- **************************************************************/
-
 /******** CONFIG ********/
 const DEVICE_ID = "DEVICE_001";
 const BASE_URL = "https://iot-miniproject-8582d-default-rtdb.firebaseio.com";
@@ -157,25 +146,6 @@ function getBestLocation(v) {
     return { lat: null, lon: null, source: null };
 }
 
-/*==============================================================
-  CORRECTION 1: getLevelBPM()
-  
-  BEFORE (wrong):
-    if(bpm > 140) return 3;
-    if(bpm > 120 || bpm < 50) return 2;        ← 121-140 = Critical, but should be Warning
-    if((bpm >= 50 && bpm < 60) || (bpm > 100 && bpm <= 120)) return 1;
-  
-  Report says (Section 5.2.1):
-    60–100   → Normal
-    50–60 or 100–120 → Warning
-    Below 50 or above 120 → Critical
-  
-  AFTER (correct):
-    Above 120  → Critical (level 2)
-    50–59 or 101–120 → Warning (level 1)
-    60–100     → Normal (level 0)
-    Below 50   → Critical (level 2)
-==============================================================*/
 function getLevelBPM(bpm) {
     if (bpm > 120) return 2;                                        // Critical: >120
     if (bpm < 50) return 2;                                         // Critical: <50
@@ -183,49 +153,12 @@ function getLevelBPM(bpm) {
     return 0;                                                        // Normal: 60-100
 }
 
-/*==============================================================
-  CORRECTION 2: getLevelSpO2()
-  
-  BEFORE (wrong):
-    if(spo2 < 88) return 3;    ← Critical only below 88
-    if(spo2 < 92) return 2;    ← 88-91 treated as level 2 (not properly Critical)
-    if(spo2 <= 94) return 1;
-  
-  Report says (Section 5.2.2):
-    95–100%  → Normal
-    92–94%   → Warning
-    Below 92% → Critical
-  
-  AFTER (correct):
-    Below 92  → Critical (level 3)
-    92–94     → Warning (level 1)
-    95–100    → Normal (level 0)
-==============================================================*/
 function getLevelSpO2(spo2) {
     if (spo2 < 92) return 3;    // Critical: below 92%
     if (spo2 <= 94) return 1;   // Warning: 92–94%
     return 0;                    // Normal: 95–100%
 }
 
-/*==============================================================
-  CORRECTION 3: getLevelTemp()
-  
-  BEFORE (wrong):
-    if(temp >= 40) return 3;    ← Critical only at 40+
-    if(temp > 38.5) return 2;   ← 38.5-39.9 returns level 2, not level 3
-    if(temp > 37.5) return 1;
-  
-  Report says (Section 5.2.3):
-    36.5–37.5°C → Normal
-    37.6–38.5°C → Warning
-    Above 38.5°C → Critical
-  
-  AFTER (correct):
-    Above 38.5  → Critical (level 3)
-    37.6–38.5   → Warning (level 1)
-    36.5–37.5   → Normal (level 0)
-    Below 36.5  → Warning (level 1) [hypothermia]
-==============================================================*/
 function getLevelTemp(temp) {
     if (temp > 38.5) return 3;                    // Critical: above 38.5°C
     if (temp > 37.5 && temp <= 38.5) return 1;    // Warning: 37.6–38.5°C
@@ -284,6 +217,56 @@ function updateRiskBadge(level) {
     riskArrowEl.innerText = arrow;
     riskArrowEl.style.color = color;
     riskCaptionEl.innerText = caption;
+}
+
+function computeCRI(v) {
+        const spo2 = Number(v.spo2);
+        const bpm = Number(v.bpm);
+        const temp = Number(v.temperature);
+
+        // SpO2 subscore (0 = best, 100 = worst)
+        let spo2Score = 0;
+        if (spo2 < 92) spo2Score = 100;
+        else if (spo2 <= 94) spo2Score = 65;
+        else spo2Score = Math.max(0, 30 - (spo2 - 95) * 5);
+
+        // BPM subscore (distance from 80 as ideal center)
+        let bpmScore = 0;
+        if (bpm < 50) bpmScore = 100;
+        else if (bpm <= 60) bpmScore = 65;
+        else if (bpm <= 100) bpmScore = Math.max(0, 20 - Math.abs(80 - bpm) * 0.5);
+        else if (bpm <= 120) bpmScore = 65;
+        else bpmScore = 100;
+
+        // Temp subscore
+        let tempScore = 0;
+        if (temp > 38.5) tempScore = 100;
+        else if (temp > 37.5) tempScore = 60;
+        else if (temp >= 36.5) tempScore = 10;
+        else tempScore = 50; // mild hypothermia
+
+        // Weighted aggregate
+        const cri = Math.round(spo2Score * 0.45 + bpmScore * 0.35 + tempScore * 0.20);
+
+        // Map numeric CRI to level
+        let level = "NORMAL";
+        if (cri > 60) level = "CRITICAL";
+        else if (cri > 30) level = "WARNING";
+
+        return { cri, level };
+}
+
+function combineCRIandML(criValue, mlResult) {
+        const mlScore = Math.round((mlResult / 2) * 100); // 0 -> 0, 1 -> 50, 2 -> 100
+
+        // weights: CRI 60%, ML 40%
+        const combined = Math.round(criValue * 0.6 + mlScore * 0.4);
+
+        let level = "NORMAL";
+        if (combined > 70) level = "CRITICAL";
+        else if (combined > 40) level = "WARNING";
+
+        return { combined, level };
 }
 
 /******** EMAIL ********/
@@ -466,64 +449,22 @@ function stopMonitoringDispatch() {
     }
 }
 
-/*==============================================================
-  CORRECTION 4 & 5: mlPredict()
-
-  BEFORE (wrong):
-    - BPM threshold was <= 61.5 (should be < 60 per report Section 5.2.1)
-    - Temperature parameter was completely ignored
-  
-  Report says ML model uses BPM, SpO2, AND temperature as inputs.
-  
-  AFTER (correct):
-    - SpO2 < 92        → Critical  (matches report Section 5.2.2)
-    - SpO2 92–94       → Warning
-    - SpO2 >= 95:
-        - Temp > 38.5  → Critical  (matches report Section 5.2.3)
-        - Temp > 37.5  → Warning
-        - BPM > 120    → Critical  (matches report Section 5.2.1)
-        - BPM < 60     → Warning   (fixed from <= 61.5)
-        - else         → Normal
-==============================================================*/
 function mlPredict(bpm, spo2, temp) {
-    // SpO2 check first (most critical vital)
     if (spo2 < 92) {
-        return 2; // CRITICAL
+        return 2;
     } else if (spo2 <= 94) {
-        return 1; // WARNING
+        return 1;
     } else {
-        // SpO2 is normal, now check Temperature
-        if (temp > 38.5) {
-            return 2; // CRITICAL
-        } else if (temp > 37.5) {
-            return 1; // WARNING
+        if (bpm > 120) {
+            return 2;
+        } else if (bpm <= 61.5) {
+            return 1;
         } else {
-            // SpO2 and Temp are normal, now check BPM
-            if (bpm > 120) {
-                return 2; // CRITICAL
-            } else if (bpm < 60 || (bpm > 100 && bpm <= 120)) {
-                return 1; // WARNING — fixed from <= 61.5 to < 60
-            } else {
-                return 0; // NORMAL
-            }
+            return 0;
         }
     }
 }
 
-/*==============================================================
-  CORRECTION 6: Main Monitoring Loop
-
-  BEFORE (wrong in report Appendix B.5):
-    if((finalLevel === "WARNING" || finalLevel === "CRITICAL") && !alertEmailSent){
-        sendEmail("doctor", v, finalLevel);   ← sends on first reading, no persistence check
-    }
-
-  Report Section 4.4.1 says alerts trigger only after confirmed/persistent abnormal conditions.
-
-  AFTER (correct):
-    Email is sent only after ALERT_PERSISTENCE_THRESHOLD (5) consecutive
-    WARNING or CRITICAL readings — prevents false alarms from single spikes.
-==============================================================*/
 mainMonitorInterval = setInterval(() => {
 
     fetch(VITALS_URL)
@@ -558,20 +499,19 @@ mainMonitorInterval = setInterval(() => {
             temperatureEl.innerText = v.temperature;
             spo2El.innerText = v.spo2;
 
-            // Risk
+            // Risk (rule-based) and ML
             const riskScore = calculateRisk(v);
             const riskLevel = getRiskLevel(riskScore);
             const mlResult = mlPredict(v.bpm, v.spo2, v.temperature);
             const mlLevel = ML_LABELS[mlResult];
 
-            // Final level: always pick higher severity
-            const finalLevel =
-                (mlLevel === "CRITICAL" || riskLevel === "CRITICAL") ? "CRITICAL" :
-                (mlLevel === "WARNING" || riskLevel === "WARNING") ? "WARNING" :
-                "NORMAL";
+            // Compute numeric CRI and combine with ML prediction
+            const { cri, level: criLevel } = computeCRI(v);
+            const combinedResult = combineCRIandML(cri, mlResult);
+            const finalLevel = combinedResult.level;
 
             statusEl.innerText = finalLevel;
-            riskScoreDisplay.innerText = riskScore;
+            riskScoreDisplay.innerText = `${combinedResult.combined} (CRI:${cri}, ML:${mlLevel})`;
             updateRiskBadge(finalLevel);
 
             statusEl.style.color =
