@@ -519,12 +519,15 @@ mainMonitorInterval = setInterval(() => {
             const { cri, level: criLevel } = computeCRI(v);
             const combinedResult = combineCRIandML(cri, mlResult, criLevel);
             let finalLevel = combinedResult.level;
+            let displayCombined = combinedResult.combined;
+
             if (v.temperature > 38.5) {
                 finalLevel = "CRITICAL";
+                displayCombined = 100;
             }
 
             statusEl.innerText = finalLevel;
-            riskScoreDisplay.innerText = `${combinedResult.combined} (CRI:${cri}, ML:${mlLevel})`;
+            riskScoreDisplay.innerText = `${displayCombined} (CRI:${cri}, ML:${mlLevel})`;
             updateRiskBadge(finalLevel);
 
             statusEl.style.color =
