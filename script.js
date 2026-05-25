@@ -521,6 +521,14 @@ mainMonitorInterval = setInterval(() => {
             let finalLevel = combinedResult.level;
             let displayCombined = combinedResult.combined;
 
+            // Ensure rule-based BPM/spO2/temp severity is respected.
+            const severityRank = { NORMAL: 0, WARNING: 1, CRITICAL: 2 };
+            const severityCandidates = [riskLevel, combinedResult.level, mlLevel];
+            finalLevel = severityCandidates.reduce((highest, next) =>
+                severityRank[next] > severityRank[highest] ? next : highest,
+                finalLevel
+            );
+
             if (v.temperature > 38.5) {
                 finalLevel = "CRITICAL";
                 displayCombined = 100;
