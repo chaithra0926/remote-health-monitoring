@@ -162,8 +162,7 @@ function getLevelSpO2(spo2) {
 function getLevelTemp(temp) {
     if (temp > 38.5) return 3;                    // Critical: above 38.5°C
     if (temp > 37.5 && temp <= 38.5) return 1;    // Warning: 37.6–38.5°C
-    if (temp >= 36.5 && temp <= 37.5) return 0;   // Normal: 36.5–37.5°C
-    return 1;                                      // Warning: below 36.5°C (hypothermia)
+    return 0;                                      // Normal: 37.5°C and below
 }
 
 /******** RISK CALCULATION ********/
@@ -242,8 +241,7 @@ function computeCRI(v) {
         let tempScore = 0;
         if (temp > 38.5) tempScore = 100;
         else if (temp > 37.5) tempScore = 60;
-        else if (temp >= 36.5) tempScore = 10;
-        else tempScore = 50; // mild hypothermia
+        else tempScore = 10; // Normal for all temps 37.5°C and below
 
         // Weighted aggregate
         let cri = Math.round(spo2Score * 0.45 + bpmScore * 0.35 + tempScore * 0.20);
